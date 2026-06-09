@@ -2,7 +2,7 @@ import ipaddress
 import shutil
 import socket
 import tempfile
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
@@ -29,30 +29,14 @@ def _is_forbidden_address(addr: "ipaddress.IPv4Address | ipaddress.IPv6Address")
     )
 
 
-def _resolve_and_validate(hostname: str) -> str:
-    """Resolve hostname once, validate every address, return the first IP.
+def _validate_url(url: str) -> None:
+    """SSRF guard: validate scheme and resolve hostname to block private ranges.
 
-    Single getaddrinfo call — the returned IP is guaranteed to be one that
-    was actually checked (no TOCTOU window).
+    We validate at DNS-resolution time but clone with the original hostname so
+    TLS certificates (bound to the hostname, not the IP) continue to work.
+    The residual DNS-rebinding window is accepted as a pragmatic trade-off for
+    a developer tool targeting public hosting services.
     """
-    try:
-        results = socket.getaddrinfo(hostname, None)
-    except socket.gaierror:
-        raise HTTPException(status_code=400, detail="Could not resolve hostname.")
-
-    if not results:
-        raise HTTPException(status_code=400, detail="No DNS results for hostname.")
-
-    for *_, sockaddr in results:
-        addr = ipaddress.ip_address(sockaddr[0])
-        if _is_forbidden_address(addr):
-            raise HTTPException(status_code=400, detail="Private/internal addresses are not allowed.")
-
-    return results[0][4][0]  # reuse — do NOT call getaddrinfo again
-
-
-def _safe_clone_url(url: str) -> str:
-    """Validate URL and substitute resolved IP to prevent DNS rebinding."""
     parsed = urlparse(url)
 
     if parsed.scheme != "https":
@@ -65,13 +49,20 @@ def _safe_clone_url(url: str) -> str:
     if "::" in url:
         raise HTTPException(status_code=400, detail="Invalid URL.")
 
-    resolved_ip = _resolve_and_validate(parsed.hostname)
+    try:
+        results = socket.getaddrinfo(parsed.hostname, None)
+    except socket.gaierror:
+        raise HTTPException(status_code=400, detail="Could not resolve hostname.")
 
-    netloc = f"[{resolved_ip}]" if ":" in resolved_ip else resolved_ip
-    if parsed.port:
-        netloc = f"{netloc}:{parsed.port}"
+    if not results:
+        raise HTTPException(status_code=400, detail="No DNS results for hostname.")
 
-    return urlunparse(parsed._replace(netloc=netloc))
+    for *_, sockaddr in results:
+        addr = ipaddress.ip_address(sockaddr[0])
+        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+            addr = addr.ipv4_mapped
+        if _is_forbidden_address(addr):
+            raise HTTPException(status_code=400, detail="Private/internal addresses are not allowed.")
 
 
 class ConnectRepoRequest(BaseModel):
@@ -81,11 +72,11 @@ class ConnectRepoRequest(BaseModel):
 
 @router.post("")
 def connect_repo(req: ConnectRepoRequest, session: Session = Depends(get_session)):
-    clone_url = _safe_clone_url(req.url)
+    _validate_url(req.url)
 
     tmp_dir = tempfile.mkdtemp()
     try:
-        GitRepo.clone_from(clone_url, tmp_dir, depth=200)
+        GitRepo.clone_from(req.url, tmp_dir, depth=200)
     except Exception as e:
         shutil.rmtree(tmp_dir, ignore_errors=True)
         raise HTTPException(status_code=400, detail=f"Failed to clone: {e}")
