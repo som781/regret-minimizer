@@ -29,7 +29,12 @@ def _is_forbidden_address(addr: "ipaddress.IPv4Address | ipaddress.IPv6Address")
 
 
 def _resolve_and_validate(hostname: str) -> str:
-    """Resolve hostname, block forbidden ranges, return first safe IP string."""
+    """Resolve hostname once, validate every address, return the first IP.
+
+    Uses a single getaddrinfo call so the returned IP is guaranteed to be
+    one that was actually checked — no TOCTOU window between validation
+    and use.
+    """
     try:
         results = socket.getaddrinfo(hostname, None)
     except socket.gaierror:
@@ -43,8 +48,7 @@ def _resolve_and_validate(hostname: str) -> str:
         if _is_forbidden_address(addr):
             raise HTTPException(status_code=400, detail="Private/internal addresses are not allowed.")
 
-    # Return first resolved IP to pin the connection (prevents DNS rebinding)
-    return socket.getaddrinfo(hostname, None)[0][4][0]
+    return results[0][4][0]  # reuse — do NOT call getaddrinfo again
 
 
 def _safe_clone_url(url: str) -> str:
