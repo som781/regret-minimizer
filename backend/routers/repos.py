@@ -74,6 +74,10 @@ class ConnectRepoRequest(BaseModel):
 def connect_repo(req: ConnectRepoRequest, session: Session = Depends(get_session)):
     _validate_url(req.url)
 
+    existing = session.exec(select(Repo).where(Repo.url == req.url)).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Repo already connected.")
+
     tmp_dir = tempfile.mkdtemp()
     try:
         GitRepo.clone_from(req.url, tmp_dir, depth=200)

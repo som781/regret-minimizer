@@ -24,7 +24,7 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url, name }),
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
     return res.json();
   },
 

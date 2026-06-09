@@ -26,7 +26,13 @@ export default function RepoConnector({ repos, selectedRepo, onRepoSelected, onR
       setUrl("");
       alert(`Connected! Parsed ${commits_parsed} commits.`);
     } catch (e: any) {
-      setError("Failed to connect. Check the URL and try again.");
+      if (e.message?.includes("409")) {
+        const existing = repos.find((r) => r.url === url.trim());
+        if (existing) onRepoSelected(existing);
+        setUrl("");
+      } else {
+        setError("Failed to connect. Check the URL and try again.");
+      }
     } finally {
       setLoading(false);
     }
