@@ -1,21 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api, type Decision, CATEGORIES, CATEGORY_COLORS } from "@/lib/api";
+import Layout from "@/components/Layout";
 import DecisionCard from "@/components/DecisionCard";
 
 type Filter = "all" | "good" | "regret" | "pending";
 
-const NAV = [["Ask", "/"], ["Timeline", "/timeline"], ["Insights", "/insights"], ["Analytics", "/analytics"]];
-
 export default function TimelinePage() {
+  const router = useRouter();
   const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("all");
   const [category, setCategory] = useState<string>("");
   const [search, setSearch] = useState("");
 
-  function load() { api.listDecisions().then(setDecisions); }
+  function load() {
+    setLoading(true);
+    api.listDecisions().then(setDecisions).finally(() => setLoading(false));
+  }
   useEffect(() => { load(); }, []);
 
   const filtered = decisions.filter((d) => {
@@ -33,42 +37,24 @@ export default function TimelinePage() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <aside className="w-64 shrink-0 border-r border-[#1a1a1a] flex flex-col p-4 space-y-6">
-        <div>
-          <h1 className="text-sm font-semibold text-white">regret-minimizer</h1>
-          <p className="text-xs text-[#555] mt-0.5">your codebase remembers</p>
-        </div>
-        <nav className="space-y-1">
-          {NAV.map(([label, href]) => (
-            <Link key={href} href={href} className={`block text-xs px-3 py-2 rounded transition-colors ${href === "/timeline" ? "text-white bg-[#1a1a1a]" : "text-[#666] hover:text-white"}`}>
-              {href === "/timeline" ? "◉" : "○"} {label}
-            </Link>
-          ))}
-        </nav>
-      </aside>
-
-      <main className="flex-1 overflow-y-auto scrollbar-thin p-8">
-        <div className="max-w-2xl mx-auto space-y-5">
+    <Layout active="timeline">
+      <div className="flex-1 overflow-y-auto scrollbar-thin">
+        <div className="max-w-2xl mx-auto px-8 py-8 space-y-5">
           <div>
-            <h2 className="text-lg font-semibold text-white">Decision Timeline</h2>
-            <p className="text-xs text-[#555] mt-1">Every decision logged, and what came of it.</p>
+            <h2 className="text-base font-semibold text-white">Decision Timeline</h2>
+            <p className="text-xs text-[#444] mt-0.5">Every decision logged, and what came of it.</p>
           </div>
 
-          {/* Search */}
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+          <input value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search decisions…"
-            className="w-full bg-[#111] border border-[#222] rounded px-3 py-2 text-sm text-white placeholder-[#444] focus:outline-none focus:border-[#444]"
-          />
+            className="w-full bg-[#141414] border border-[#1e1e1e] rounded-lg px-3 py-2 text-sm placeholder-[#2e2e2e] focus:outline-none focus:border-[#2e2e2e] transition-colors" />
 
           {/* Outcome filter */}
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-1.5 flex-wrap">
             {(["all", "good", "regret", "pending"] as Filter[]).map((f) => (
               <button key={f} onClick={() => setFilter(f)}
-                className={`text-xs px-3 py-1.5 rounded border transition-colors ${filter === f ? "border-white text-white bg-[#1a1a1a]" : "border-[#222] text-[#666] hover:text-white hover:border-[#444]"}`}>
-                {f} <span className="text-[#444]">({counts[f]})</span>
+                className={`text-xs px-3 py-1.5 rounded-md border transition-colors ${filter === f ? "border-[#444] text-white bg-white/5" : "border-[#1e1e1e] text-[#444] hover:text-[#888] hover:border-[#2a2a2a]"}`}>
+                {f} <span className="opacity-40">({counts[f]})</span>
               </button>
             ))}
           </div>
@@ -76,20 +62,32 @@ export default function TimelinePage() {
           {/* Category filter */}
           <div className="flex gap-1.5 flex-wrap">
             <button onClick={() => setCategory("")}
-              className={`text-xs px-2 py-0.5 rounded border transition-colors ${!category ? "border-white text-white" : "border-[#222] text-[#555] hover:border-[#444]"}`}>
-              all categories
+              className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${!category ? "border-[#444] text-white" : "border-[#1e1e1e] text-[#3a3a3a] hover:border-[#2a2a2a]"}`}>
+              all
             </button>
             {CATEGORIES.map((cat) => (
               <button key={cat} onClick={() => setCategory(category === cat ? "" : cat)}
-                className={`text-xs px-2 py-0.5 rounded border transition-colors ${category === cat ? CATEGORY_COLORS[cat] : "border-[#222] text-[#555] hover:border-[#444]"}`}>
+                className={`text-[10px] px-2 py-0.5 rounded border transition-colors ${category === cat ? CATEGORY_COLORS[cat] : "border-[#1e1e1e] text-[#3a3a3a] hover:border-[#2a2a2a]"}`}>
                 {cat}
               </button>
             ))}
           </div>
 
-          {filtered.length === 0 ? (
-            <div className="text-center py-20 text-[#444] text-sm">
-              {decisions.length === 0 ? "No decisions logged yet." : "No decisions match this filter."}
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => <div key={i} className="skeleton h-24 rounded-xl" />)}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-20 space-y-3">
+              <p className="text-[#2e2e2e] text-sm">
+                {decisions.length === 0 ? "No decisions logged yet." : "No decisions match this filter."}
+              </p>
+              {decisions.length === 0 && (
+                <button onClick={() => router.push("/")}
+                  className="text-xs text-[#444] border border-[#1e1e1e] rounded-md px-3 py-1.5 hover:border-[#2e2e2e] hover:text-[#888] transition-colors">
+                  Ask the agent to get started →
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
@@ -97,7 +95,7 @@ export default function TimelinePage() {
             </div>
           )}
         </div>
-      </main>
-    </div>
+      </div>
+    </Layout>
   );
 }
