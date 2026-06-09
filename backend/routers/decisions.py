@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session, select
+from sqlmodel import Session, select, or_, func
 from pydantic import BaseModel
 from backend.database import get_session
 from backend.models import Decision
@@ -17,7 +17,7 @@ class CreateDecisionRequest(BaseModel):
 
 
 class UpdateOutcomeRequest(BaseModel):
-    outcome: str  # good | regret | pending
+    outcome: Literal["good", "regret", "pending"]
     outcome_notes: Optional[str] = None
 
 
@@ -41,11 +41,15 @@ def list_decisions(repo_id: Optional[int] = None, session: Session = Depends(get
 @router.get("/search")
 def search_decisions(q: str = Query(...), session: Session = Depends(get_session)):
     q_lower = q.lower()
-    decisions = session.exec(select(Decision)).all()
-    return [
-        d for d in decisions
-        if q_lower in d.title.lower() or q_lower in d.description.lower()
-    ]
+    rows = session.exec(
+        select(Decision).where(
+            or_(
+                func.lower(Decision.title).contains(q_lower),
+                func.lower(Decision.description).contains(q_lower),
+            )
+        )
+    ).all()
+    return rows
 
 
 @router.patch("/{decision_id}/outcome")

@@ -1,4 +1,5 @@
 import ipaddress
+import shutil
 import socket
 import tempfile
 from urllib.parse import urlparse, urlunparse
@@ -31,9 +32,8 @@ def _is_forbidden_address(addr: "ipaddress.IPv4Address | ipaddress.IPv6Address")
 def _resolve_and_validate(hostname: str) -> str:
     """Resolve hostname once, validate every address, return the first IP.
 
-    Uses a single getaddrinfo call so the returned IP is guaranteed to be
-    one that was actually checked — no TOCTOU window between validation
-    and use.
+    Single getaddrinfo call — the returned IP is guaranteed to be one that
+    was actually checked (no TOCTOU window).
     """
     try:
         results = socket.getaddrinfo(hostname, None)
@@ -52,11 +52,7 @@ def _resolve_and_validate(hostname: str) -> str:
 
 
 def _safe_clone_url(url: str) -> str:
-    """
-    Validate url and return a version with the hostname replaced by its
-    resolved IP so libgit2 cannot re-resolve to a different address later
-    (DNS rebinding mitigation).
-    """
+    """Validate URL and substitute resolved IP to prevent DNS rebinding."""
     parsed = urlparse(url)
 
     if parsed.scheme != "https":
@@ -71,7 +67,6 @@ def _safe_clone_url(url: str) -> str:
 
     resolved_ip = _resolve_and_validate(parsed.hostname)
 
-    # Substitute resolved IP for hostname so clone uses the pinned address
     netloc = f"[{resolved_ip}]" if ":" in resolved_ip else resolved_ip
     if parsed.port:
         netloc = f"{netloc}:{parsed.port}"
@@ -92,6 +87,7 @@ def connect_repo(req: ConnectRepoRequest, session: Session = Depends(get_session
     try:
         GitRepo.clone_from(clone_url, tmp_dir, depth=200)
     except Exception as e:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
         raise HTTPException(status_code=400, detail=f"Failed to clone: {e}")
 
     name = req.name or req.url.rstrip("/").split("/")[-1].replace(".git", "")
@@ -100,7 +96,14 @@ def connect_repo(req: ConnectRepoRequest, session: Session = Depends(get_session
     session.commit()
     session.refresh(repo)
 
-    commits_parsed = parse_repo(repo.id, tmp_dir, session)
+    try:
+        commits_parsed = parse_repo(repo.id, tmp_dir, session)
+    except Exception as e:
+        session.delete(repo)
+        session.commit()
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise HTTPException(status_code=500, detail=f"Failed to parse repo: {e}")
+
     return {"repo": repo, "commits_parsed": commits_parsed}
 
 

@@ -36,10 +36,14 @@ export default function ChatWindow({ selectedRepo }: Props) {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, repoId: selectedRepo?.id ?? 1 }),
+        body: JSON.stringify({ message: text, repoId: selectedRepo?.id }),
       });
 
-      const reader = res.body!.getReader();
+      if (!res.ok || !res.body) {
+        throw new Error(`Request failed: ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
       const decoder = new TextDecoder();
 
       while (true) {

@@ -1,35 +1,39 @@
 import { NextRequest } from "next/server";
 import path from "path";
 import fs from "fs";
+import { query, tool } from "@open-gitagent/gitagent";
 
 const BACKEND = process.env.BACKEND_URL || "http://localhost:8000";
 const AGENT_DIR = path.join(process.cwd(), "..", "agent");
 
+// Cached once at module load — these files don't change at runtime
+const SYSTEM_PROMPT = loadSystemPrompt();
+
 export async function POST(req: NextRequest) {
   const { message, repoId } = await req.json();
 
+  if (!message || typeof message !== "string") {
+    return new Response("Missing message", { status: 400 });
+  }
+
   const [gitResults, decisionResults, summary] = await Promise.all([
     fetch(`${BACKEND}/git/search?repo_id=${repoId}&q=${encodeURIComponent(message)}`)
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : []))
       .catch(() => []),
     fetch(`${BACKEND}/decisions/search?q=${encodeURIComponent(message)}`)
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : []))
       .catch(() => []),
     fetch(`${BACKEND}/git/summary/${repoId}`)
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : null))
       .catch(() => null),
   ]);
 
   const context = buildContext(gitResults, decisionResults, summary);
-  const systemPrompt = loadSystemPrompt();
 
   const stream = new ReadableStream({
     async start(controller) {
       const enc = new TextEncoder();
       try {
-        // Use gitagent SDK with custom tools
-        const { query, tool } = await import("@open-gitagent/gitagent");
-
         const searchGit = tool(
           "search_git_history",
           "Search git history for commits related to a technical decision",
@@ -41,8 +45,7 @@ export async function POST(req: NextRequest) {
             const res = await fetch(
               `${BACKEND}/git/search?repo_id=${repoId}&q=${encodeURIComponent(args.keywords)}`
             );
-            const data = await res.json();
-            return { text: JSON.stringify(data) };
+            return { text: JSON.stringify(res.ok ? await res.json() : []) };
           }
         );
 
@@ -57,18 +60,15 @@ export async function POST(req: NextRequest) {
             const res = await fetch(
               `${BACKEND}/decisions/search?q=${encodeURIComponent(args.query)}`
             );
-            const data = await res.json();
-            return { text: JSON.stringify(data) };
+            return { text: JSON.stringify(res.ok ? await res.json() : []) };
           }
         );
 
-        const prompt = `${context}\n\nDecision question: ${message}`;
-
         for await (const msg of query({
-          prompt,
+          prompt: `${context}\n\nDecision question: ${message}`,
           dir: AGENT_DIR,
           model: "openai:gpt-4o",
-          systemPromptSuffix: systemPrompt,
+          systemPromptSuffix: SYSTEM_PROMPT,
           tools: [searchGit, getDecisions],
           maxTurns: 5,
         })) {
@@ -114,10 +114,7 @@ function buildContext(gitResults: any[], decisions: any[], summary: any): string
     parts.push(
       "\n### Relevant commits:\n" +
         gitResults
-          .map(
-            (c: any) =>
-              `- [${c.date}] ${c.hash}: ${c.message}${c.is_revert ? " ⚠️ REVERT" : ""}`
-          )
+          .map((c: any) => `- [${c.date}] ${c.hash}: ${c.message}${c.is_revert ? " ⚠️ REVERT" : ""}`)
           .join("\n")
     );
   }

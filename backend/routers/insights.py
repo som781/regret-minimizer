@@ -12,14 +12,23 @@ def get_insights(repo_id: int, session: Session = Depends(get_session)):
     commits = session.exec(select(GitCommit).where(GitCommit.repo_id == repo_id)).all()
 
     total = len(decisions)
-    regretted = sum(1 for d in decisions if d.outcome == "regret")
-    good = sum(1 for d in decisions if d.outcome == "good")
+    good = regretted = 0
+    for d in decisions:
+        if d.outcome == "good":
+            good += 1
+        elif d.outcome == "regret":
+            regretted += 1
     pending = total - good - regretted
 
     total_commits = len(commits)
-    revert_count = sum(1 for c in commits if c.is_revert)
-    significant = sum(1 for c in commits if "significant" in c.tags)
-    fix_count = sum(1 for c in commits if "fix" in c.tags)
+    revert_count = significant = fix_count = 0
+    for c in commits:
+        if c.is_revert:
+            revert_count += 1
+        if "significant" in c.tags:
+            significant += 1
+        if "fix" in c.tags:
+            fix_count += 1
 
     patterns = []
     if total > 0 and regretted / total > 0.3:
