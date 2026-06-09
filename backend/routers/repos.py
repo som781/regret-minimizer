@@ -1,7 +1,7 @@
 import ipaddress
 import socket
 import tempfile
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
@@ -13,40 +13,66 @@ from backend.services.git_service import parse_repo
 
 router = APIRouter()
 
-_PRIVATE_NETWORKS = [
-    ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.168.0.0/16"),
-    ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("169.254.0.0/16"),  # link-local
-    ipaddress.ip_network("::1/128"),
-    ipaddress.ip_network("fc00::/7"),
-]
+
+def _is_forbidden_address(addr: "ipaddress.IPv4Address | ipaddress.IPv6Address") -> bool:
+    # Unmap IPv4-in-IPv6 (e.g. ::ffff:192.168.1.1) before checking
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+        addr = addr.ipv4_mapped
+    return (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_reserved
+        or addr.is_multicast
+        or addr.is_unspecified
+    )
 
 
-def _validate_repo_url(url: str) -> None:
+def _resolve_and_validate(hostname: str) -> str:
+    """Resolve hostname, block forbidden ranges, return first safe IP string."""
+    try:
+        results = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        raise HTTPException(status_code=400, detail="Could not resolve hostname.")
+
+    if not results:
+        raise HTTPException(status_code=400, detail="No DNS results for hostname.")
+
+    for *_, sockaddr in results:
+        addr = ipaddress.ip_address(sockaddr[0])
+        if _is_forbidden_address(addr):
+            raise HTTPException(status_code=400, detail="Private/internal addresses are not allowed.")
+
+    # Return first resolved IP to pin the connection (prevents DNS rebinding)
+    return socket.getaddrinfo(hostname, None)[0][4][0]
+
+
+def _safe_clone_url(url: str) -> str:
+    """
+    Validate url and return a version with the hostname replaced by its
+    resolved IP so libgit2 cannot re-resolve to a different address later
+    (DNS rebinding mitigation).
+    """
     parsed = urlparse(url)
 
-    if parsed.scheme not in ("https",):
+    if parsed.scheme != "https":
         raise HTTPException(status_code=400, detail="Only https:// URLs are allowed.")
 
     if not parsed.hostname:
         raise HTTPException(status_code=400, detail="Invalid URL: no hostname.")
 
-    # Reject git ext:: and similar protocol-injection patterns
+    # Reject git ext:: and similar protocol-injection strings
     if "::" in url:
         raise HTTPException(status_code=400, detail="Invalid URL.")
 
-    # Resolve hostname and block private/loopback/link-local addresses (SSRF guard)
-    try:
-        results = socket.getaddrinfo(parsed.hostname, None)
-    except socket.gaierror:
-        raise HTTPException(status_code=400, detail="Could not resolve hostname.")
+    resolved_ip = _resolve_and_validate(parsed.hostname)
 
-    for *_, sockaddr in results:
-        addr = ipaddress.ip_address(sockaddr[0])
-        if any(addr in net for net in _PRIVATE_NETWORKS):
-            raise HTTPException(status_code=400, detail="Private/internal addresses are not allowed.")
+    # Substitute resolved IP for hostname so clone uses the pinned address
+    netloc = f"[{resolved_ip}]" if ":" in resolved_ip else resolved_ip
+    if parsed.port:
+        netloc = f"{netloc}:{parsed.port}"
+
+    return urlunparse(parsed._replace(netloc=netloc))
 
 
 class ConnectRepoRequest(BaseModel):
@@ -56,11 +82,11 @@ class ConnectRepoRequest(BaseModel):
 
 @router.post("")
 def connect_repo(req: ConnectRepoRequest, session: Session = Depends(get_session)):
-    _validate_repo_url(req.url)
+    clone_url = _safe_clone_url(req.url)
 
     tmp_dir = tempfile.mkdtemp()
     try:
-        GitRepo.clone_from(req.url, tmp_dir, depth=200)
+        GitRepo.clone_from(clone_url, tmp_dir, depth=200)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to clone: {e}")
 

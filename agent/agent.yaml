@@ -4,8 +4,8 @@ version: 1.0.0
 description: Mines git history and past decisions to help you avoid repeating mistakes
 
 model:
-  preferred: "anthropic:claude-sonnet-4-5-20250929"
-  fallback: ["openai:gpt-4o"]
+  preferred: "openai:gpt-4o"
+  fallback: ["openai:gpt-4o-mini"]
   constraints:
     temperature: 0.2
     max_tokens: 512

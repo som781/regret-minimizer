@@ -67,6 +67,7 @@ export async function POST(req: NextRequest) {
         for await (const msg of query({
           prompt,
           dir: AGENT_DIR,
+          model: "openai:gpt-4o",
           systemPromptSuffix: systemPrompt,
           tools: [searchGit, getDecisions],
           maxTurns: 5,
