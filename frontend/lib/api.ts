@@ -45,6 +45,12 @@ export const api = {
     return fetch(`${BASE}/repos`).then((r) => r.json());
   },
 
+  async refreshRepo(id: number): Promise<{ repo: Repo; commits_parsed: number }> {
+    const res = await fetch(`${BASE}/repos/${id}/refresh`, { method: "POST" });
+    if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+    return res.json();
+  },
+
   async logDecision(data: {
     repo_id?: number;
     title: string;

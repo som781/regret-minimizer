@@ -113,3 +113,31 @@ def get_repo(repo_id: int, session: Session = Depends(get_session)):
     if not repo:
         raise HTTPException(status_code=404)
     return repo
+
+
+@router.post("/{repo_id}/refresh")
+def refresh_repo(repo_id: int, session: Session = Depends(get_session)):
+    from backend.models import GitCommit
+    from sqlmodel import delete
+
+    repo = session.get(Repo, repo_id)
+    if not repo:
+        raise HTTPException(status_code=404)
+
+    # Pull latest commits
+    try:
+        git_repo = GitRepo(repo.local_path)
+        git_repo.remotes.origin.pull(depth=200)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to pull: {e}")
+
+    # Delete existing parsed commits and re-parse
+    session.exec(delete(GitCommit).where(GitCommit.repo_id == repo_id))
+    session.commit()
+
+    try:
+        commits_parsed = parse_repo(repo_id, repo.local_path, session)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to re-parse: {e}")
+
+    return {"repo": repo, "commits_parsed": commits_parsed}

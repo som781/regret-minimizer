@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { api, type Repo } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 
@@ -15,7 +15,8 @@ interface Props {
 export default function RepoConnector({ repos, selectedRepo, onRepoSelected, onRepoAdded, loading }: Props) {
   const urlRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
-  const [connecting, setConnecting] = React.useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [refreshingId, setRefreshingId] = useState<number | null>(null);
 
   async function connect() {
     const url = urlRef.current?.value.trim();
@@ -43,6 +44,19 @@ export default function RepoConnector({ repos, selectedRepo, onRepoSelected, onR
     }
   }
 
+  async function refresh(repo: Repo, e: React.MouseEvent) {
+    e.stopPropagation();
+    setRefreshingId(repo.id);
+    try {
+      const { commits_parsed } = await api.refreshRepo(repo.id);
+      toast(`${repo.name} refreshed — ${commits_parsed} commits.`, "success");
+    } catch {
+      toast(`Failed to refresh ${repo.name}.`, "error");
+    } finally {
+      setRefreshingId(null);
+    }
+  }
+
   return (
     <div className="space-y-1 py-3">
       <p className="text-[10px] text-[#3a3a3a] uppercase tracking-widest px-2 mb-2">Repository</p>
@@ -53,15 +67,33 @@ export default function RepoConnector({ repos, selectedRepo, onRepoSelected, onR
         </div>
       ) : (
         repos.map((r) => (
-          <button key={String(r.id)} onClick={() => onRepoSelected(r)}
-            className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors flex items-center gap-2 group ${
-              selectedRepo?.id === r.id
-                ? "bg-white/5 text-white"
-                : "text-[#555] hover:text-[#ccc] hover:bg-white/[0.03]"
+          <div key={String(r.id)}
+            className={`flex items-center gap-1 rounded-md transition-colors group ${
+              selectedRepo?.id === r.id ? "bg-white/5" : "hover:bg-white/[0.03]"
             }`}>
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${selectedRepo?.id === r.id ? "bg-green-500" : "bg-[#2a2a2a] group-hover:bg-[#444]"}`} />
-            <span className="font-mono truncate text-xs">{r.name}</span>
-          </button>
+            <button onClick={() => onRepoSelected(r)}
+              className={`flex-1 text-left px-3 py-2 flex items-center gap-2 min-w-0 ${
+                selectedRepo?.id === r.id ? "text-white" : "text-[#555] group-hover:text-[#ccc]"
+              }`}>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
+                selectedRepo?.id === r.id ? "bg-green-500" : "bg-[#2a2a2a] group-hover:bg-[#444]"
+              }`} />
+              <span className="font-mono truncate text-xs">{r.name}</span>
+            </button>
+            {/* Refresh button — visible on hover or when refreshing */}
+            <button
+              onClick={(e) => refresh(r, e)}
+              disabled={refreshingId === r.id}
+              title="Pull latest commits"
+              className="opacity-0 group-hover:opacity-100 shrink-0 pr-2 text-[#444] hover:text-[#888] disabled:opacity-30 transition-all">
+              <svg
+                className={`w-3 h-3 ${refreshingId === r.id ? "animate-spin" : ""}`}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
         ))
       )}
 
@@ -77,6 +109,3 @@ export default function RepoConnector({ repos, selectedRepo, onRepoSelected, onR
     </div>
   );
 }
-
-// Need React for useState
-import React from "react";
