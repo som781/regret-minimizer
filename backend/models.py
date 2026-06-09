@@ -31,5 +31,6 @@ class Decision(SQLModel, table=True):
     reasoning: str
     outcome: Optional[str] = None  # good | regret | pending
     outcome_notes: Optional[str] = None
+    category: Optional[str] = None  # architecture | dependency | refactor | performance | security | other
     created_at: datetime = Field(default_factory=datetime.utcnow)
     resolved_at: Optional[datetime] = None

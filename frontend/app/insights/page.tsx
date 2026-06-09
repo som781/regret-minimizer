@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { api, type Insights, type Repo } from "@/lib/api";
 
 export default function InsightsPage() {
+  const router = useRouter();
   const [repos, setRepos] = useState<Repo[]>([]);
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null);
   const [insights, setInsights] = useState<Insights | null>(null);
@@ -30,15 +32,10 @@ export default function InsightsPage() {
           <p className="text-xs text-[#555] mt-0.5">your codebase remembers</p>
         </div>
         <nav className="space-y-1">
-          <Link href="/" className="block text-xs text-[#666] hover:text-white px-3 py-2 rounded transition-colors">
-            ○ Ask
-          </Link>
-          <Link href="/timeline" className="block text-xs text-[#666] hover:text-white px-3 py-2 rounded transition-colors">
-            ○ Timeline
-          </Link>
-          <Link href="/insights" className="block text-xs text-white bg-[#1a1a1a] px-3 py-2 rounded">
-            ◉ Insights
-          </Link>
+          <Link href="/" className="block text-xs text-[#666] hover:text-white px-3 py-2 rounded transition-colors">○ Ask</Link>
+          <Link href="/timeline" className="block text-xs text-[#666] hover:text-white px-3 py-2 rounded transition-colors">○ Timeline</Link>
+          <Link href="/insights" className="block text-xs text-white bg-[#1a1a1a] px-3 py-2 rounded">◉ Insights</Link>
+          <Link href="/analytics" className="block text-xs text-[#666] hover:text-white px-3 py-2 rounded transition-colors">○ Analytics</Link>
         </nav>
 
         {repos.length > 0 && (
@@ -132,9 +129,14 @@ export default function InsightsPage() {
                   <p className="text-xs text-[#666] uppercase tracking-widest">Detected Patterns</p>
                   <div className="space-y-2">
                     {insights.patterns.map((p, i) => (
-                      <div key={i} className="flex gap-3 items-start text-sm text-[#aaa] bg-[#111] border border-[#1a1a1a] rounded px-4 py-3">
-                        <span className="text-yellow-600 shrink-0">⚠</span>
-                        {p}
+                      <div key={i} className="flex gap-3 items-start bg-[#111] border border-[#1a1a1a] rounded px-4 py-3">
+                        <span className="text-yellow-600 shrink-0 mt-0.5">⚠</span>
+                        <p className="text-sm text-[#aaa] flex-1">{p}</p>
+                        <button
+                          onClick={() => router.push(`/?q=${encodeURIComponent(`${p} — what should we do about this?`)}`)}
+                          className="shrink-0 text-xs text-[#555] border border-[#222] rounded px-2 py-0.5 hover:text-white hover:border-[#444] transition-colors whitespace-nowrap">
+                          Ask →
+                        </button>
                       </div>
                     ))}
                   </div>

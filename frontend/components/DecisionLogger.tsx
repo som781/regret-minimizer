@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { api, type Repo } from "@/lib/api";
+import { api, type Repo, CATEGORIES, CATEGORY_COLORS } from "@/lib/api";
 
 interface Props {
   selectedRepo: Repo | null;
@@ -10,7 +10,7 @@ interface Props {
 
 export default function DecisionLogger({ selectedRepo, onLogged }: Props) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", reasoning: "" });
+  const [form, setForm] = useState({ title: "", description: "", reasoning: "", category: "" });
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -22,8 +22,9 @@ export default function DecisionLogger({ selectedRepo, onLogged }: Props) {
         title: form.title,
         description: form.description,
         reasoning: form.reasoning,
+        category: form.category || undefined,
       });
-      setForm({ title: "", description: "", reasoning: "" });
+      setForm({ title: "", description: "", reasoning: "", category: "" });
       setOpen(false);
       onLogged();
     } finally {
@@ -62,6 +63,24 @@ export default function DecisionLogger({ selectedRepo, onLogged }: Props) {
             rows={2}
             className="w-full bg-[#111] border border-[#222] rounded px-3 py-2 text-sm text-white placeholder-[#444] focus:outline-none focus:border-[#444] resize-none"
           />
+
+          {/* Category picker */}
+          <div className="flex flex-wrap gap-1 pt-1">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setForm({ ...form, category: form.category === cat ? "" : cat })}
+                className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                  form.category === cat
+                    ? CATEGORY_COLORS[cat]
+                    : "text-[#555] border-[#222] hover:border-[#444]"
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+
           <button
             onClick={save}
             disabled={saving || !form.title.trim()}

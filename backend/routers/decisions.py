@@ -14,6 +14,7 @@ class CreateDecisionRequest(BaseModel):
     title: str
     description: str
     reasoning: str
+    category: Optional[str] = None
 
 
 class UpdateOutcomeRequest(BaseModel):

@@ -10,11 +10,12 @@ interface Message {
 
 interface Props {
   selectedRepo: Repo | null;
+  initialQuestion?: string;
 }
 
-export default function ChatWindow({ selectedRepo }: Props) {
+export default function ChatWindow({ selectedRepo, initialQuestion }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialQuestion ?? "");
   const [streaming, setStreaming] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 

@@ -8,6 +8,7 @@ export type Decision = {
   reasoning: string;
   outcome: "good" | "regret" | "pending" | null;
   outcome_notes: string | null;
+  category: string | null;
   created_at: string;
   repo_id: number | null;
 };
@@ -15,6 +16,18 @@ export type Insights = {
   decisions: { total: number; good: number; regretted: number; pending: number };
   commits: { total: number; reverts: number; revert_rate: number; significant_changes: number; fix_commits: number };
   patterns: string[];
+};
+
+export const CATEGORIES = ["architecture", "dependency", "refactor", "performance", "security", "other"] as const;
+export type Category = typeof CATEGORIES[number];
+
+export const CATEGORY_COLORS: Record<string, string> = {
+  architecture: "text-blue-400 border-blue-900 bg-blue-950",
+  dependency: "text-purple-400 border-purple-900 bg-purple-950",
+  refactor: "text-cyan-400 border-cyan-900 bg-cyan-950",
+  performance: "text-yellow-400 border-yellow-900 bg-yellow-950",
+  security: "text-red-400 border-red-900 bg-red-950",
+  other: "text-[#666] border-[#333] bg-[#111]",
 };
 
 export const api = {
@@ -37,6 +50,7 @@ export const api = {
     title: string;
     description: string;
     reasoning: string;
+    category?: string;
   }): Promise<Decision> {
     const res = await fetch(`${BASE}/decisions`, {
       method: "POST",
@@ -62,5 +76,21 @@ export const api = {
 
   async getInsights(repo_id: number): Promise<Insights> {
     return fetch(`${BASE}/insights/${repo_id}`).then((r) => r.json());
+  },
+
+  async getActivity(repo_id: number) {
+    return fetch(`${BASE}/analytics/activity/${repo_id}`).then((r) => r.json());
+  },
+
+  async getBreakdown(repo_id: number) {
+    return fetch(`${BASE}/analytics/breakdown/${repo_id}`).then((r) => r.json());
+  },
+
+  async getHotspots(repo_id: number) {
+    return fetch(`${BASE}/analytics/hotspots/${repo_id}`).then((r) => r.json());
+  },
+
+  async getDecisionVelocity(repo_id: number) {
+    return fetch(`${BASE}/analytics/decision-velocity/${repo_id}`).then((r) => r.json());
   },
 };

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { api, type Decision } from "@/lib/api";
+import { api, type Decision, CATEGORY_COLORS } from "@/lib/api";
 
 const OUTCOME_STYLES = {
   good: "text-green-400 border-green-900 bg-green-950",
@@ -28,20 +28,25 @@ export default function DecisionCard({ decision, onUpdated }: Props) {
   }
 
   const outcome = (decision.outcome ?? "pending") as keyof typeof OUTCOME_STYLES;
-  const style = OUTCOME_STYLES[outcome] || OUTCOME_STYLES.pending;
+  const outcomeStyle = OUTCOME_STYLES[outcome] || OUTCOME_STYLES.pending;
 
   return (
     <div className="border border-[#1a1a1a] rounded-lg p-4 space-y-3 hover:border-[#2a2a2a] transition-colors">
       <div className="flex items-start justify-between gap-4">
-        <div>
+        <div className="space-y-1">
           <p className="text-sm font-medium text-white">{decision.title}</p>
-          <p className="text-xs text-[#666] mt-0.5">
-            {new Date(decision.created_at).toLocaleDateString("en-US", {
-              year: "numeric", month: "short", day: "numeric",
-            })}
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-[#666]">
+              {new Date(decision.created_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+            </p>
+            {decision.category && (
+              <span className={`text-xs px-2 py-0.5 rounded border ${CATEGORY_COLORS[decision.category] ?? CATEGORY_COLORS.other}`}>
+                {decision.category}
+              </span>
+            )}
+          </div>
         </div>
-        <span className={`text-xs px-2 py-0.5 rounded border ${style} shrink-0`}>
+        <span className={`text-xs px-2 py-0.5 rounded border ${outcomeStyle} shrink-0`}>
           {outcome}
         </span>
       </div>
@@ -58,18 +63,12 @@ export default function DecisionCard({ decision, onUpdated }: Props) {
 
       {!decision.outcome && (
         <div className="flex gap-2 pt-1">
-          <button
-            onClick={() => setOutcome("good")}
-            disabled={updating}
-            className="text-xs px-3 py-1 rounded border border-green-900 text-green-500 hover:bg-green-950 transition-colors disabled:opacity-40"
-          >
+          <button onClick={() => setOutcome("good")} disabled={updating}
+            className="text-xs px-3 py-1 rounded border border-green-900 text-green-500 hover:bg-green-950 transition-colors disabled:opacity-40">
             ✓ Good call
           </button>
-          <button
-            onClick={() => setOutcome("regret")}
-            disabled={updating}
-            className="text-xs px-3 py-1 rounded border border-red-900 text-red-500 hover:bg-red-950 transition-colors disabled:opacity-40"
-          >
+          <button onClick={() => setOutcome("regret")} disabled={updating}
+            className="text-xs px-3 py-1 rounded border border-red-900 text-red-500 hover:bg-red-950 transition-colors disabled:opacity-40">
             ✗ Regret it
           </button>
         </div>
