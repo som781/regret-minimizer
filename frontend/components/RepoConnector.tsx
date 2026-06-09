@@ -38,7 +38,7 @@ export default function RepoConnector({ repos, selectedRepo, onRepoSelected, onR
 
       {repos.map((r) => (
         <button
-          key={r.id}
+          key={String(r.id)}
           onClick={() => onRepoSelected(r)}
           className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
             selectedRepo?.id === r.id
